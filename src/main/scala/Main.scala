@@ -123,7 +123,55 @@ object FlightAnalyticsWithGraphx extends App {
     impAirports.take(10).foreach(println)
     println()
 
+    /**
+     * Airfare Formula = 50 + distance / 20
+     *
+     */
+
+    // starting vertex
+    val sourceId: VertexId = 78531
+    // a graph with edges containing airfare cost calculation
+    val weightedEdgesGraph = airlineGraph.mapEdges(e => (e.attr, 50.0 + e.attr.DISTANCE.toDouble / 20))
+
+    val firstMessage = Double.PositiveInfinity
+    val iterations = 20
+    val edgeDirection = EdgeDirection.Out
+
+    // initialize graph, all vertices except source have distance infinity
+    val initialGraph = weightedEdgesGraph.mapVertices((id, airport) => if (id == sourceId) (id, airport, 0.0) else (id, airport, Double.PositiveInfinity))
+
+    // Vertex Program
+    val updateVertex = (vId: Long, air: (VertexId, Airport, Double), distance: Double) => (air._1, air._2,math.min(air._3, distance))
+
+    // Send Message
+    val sendMsg = (triplet: EdgeTriplet[(VertexId, Airport, Double), (Flight, Double)]) => {
+
+      if (triplet.srcAttr._3 + triplet.attr._2 < triplet.dstAttr._3) {
+
+        Iterator((triplet.dstId, triplet.srcAttr._3 + triplet.attr._2))
+
+      } else {
+
+        Iterator.empty
+
+      }
+    }
+    // Merge Message
+    val aggregateMsgs = (x: Double, y: Double) => math.min(x, y)
+
+    // call pregel on graph
+    val sssp = initialGraph.pregel(firstMessage)(updateVertex, sendMsg, aggregateMsgs)
+    val airportMap = sssp.vertices.collect.toMap
+    val arrayOfx = sssp.edges.take(1)
+    var x = arrayOfx(0)
+
     //Query 12 - Find the Routes with the lowest flight costs
+
+    val routesWithLowestFlightCosts = sssp.edges.map { case x: Edge[(Flight, Double)] => (airportMap(x.srcId), airportMap(x.dstId), x.attr._2) }.takeOrdered(10)(Ordering.by(_._3))
+
+    println("Find the Routes with the lowest flight costs ")
+    routesWithLowestFlightCosts.map(f => f._1._2.AIRPORT +"," + f._1._2.CITY + " to " + f._2._2.AIRPORT+"," + f._2._2.CITY  + " $"+f._3 ).foreach(println)
+    
     //Query 13 - Find airports and their lowest flight costs
     //Query 14 - Display airport codes along with sorted lowest flight costs
 
